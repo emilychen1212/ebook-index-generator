@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>電子書目錄頁生成器</title>
+<style>
+    :root { --brand: #667eea; --ok: #10b981; --line: #e5e7eb; --muted: #6b7280; --soft: #f9fafb; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: -apple-system, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh; padding: 20px; color: #1f2937;
+    }
+    .container { max-width: 1400px; margin: 0 auto; background: #fff; border-radius: 15px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 32px; }
+    header h1 { font-size: 1.8em; margin-bottom: 6px; }
+    header p { color: var(--muted); margin-bottom: 24px; }
+    .step { border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+    .step h2 { font-size: 1.1em; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+    .num { display: inline-flex; width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff; align-items: center; justify-content: center; font-size: 0.9em; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    label { display: block; font-weight: 600; color: #374151; margin: 12px 0 6px; font-size: 0.92em; }
+    .grid2 > div > label:first-child { margin-top: 0; }
+    input[type="text"], textarea, select { width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand); }
+    textarea { font-family: Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+    #outline { min-height: 380px; }
+    button { padding: 10px 18px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+    .btn-light { background: #f3f4f6; color: #374151; }
+    .btn-light:hover { background: #e5e7eb; }
+    .btn-ok { background: var(--ok); color: #fff; }
+    .btn-link { background: none; color: var(--brand); padding: 4px 6px; font-size: 0.88em; text-decoration: underline; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .hint { color: var(--muted); font-size: 0.88em; margin-top: 8px; line-height: 1.6; }
+    .folder-info { margin-top: 12px; padding: 12px; background: var(--soft); border-radius: 8px; font-size: 0.9em; }
+    .summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .chip { padding: 4px 10px; border-radius: 999px; font-size: 0.85em; font-weight: 600; }
+    .chip.ok { background: #d1fae5; color: #065f46; }
+    .chip.warn { background: #fef3c7; color: #92400e; }
+    .chip.info { background: #e0e7ff; color: #3730a3; }
+    .map-wrap { max-height: 540px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+    table.map { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    table.map th, table.map td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    table.map th { position: sticky; top: 0; background: #f3f4f6; z-index: 1; }
+    tr.sec td { background: #e0f2fe; font-weight: 700; }
+    tr.grp td { background: #f5f3ff; font-weight: 600; color: #5b21b6; }
+    tr.miss td { background: #fffbeb; }
+    tr.off td { color: #9ca3af; }
+    tr.off td:first-child { text-decoration: line-through; }
+    table.map select { padding: 4px 6px; font-size: 13px; border-width: 1px; }
+    .st { white-space: nowrap; }
+    .empty { padding: 24px; text-align: center; color: var(--muted); }
+    .unused { margin-top: 10px; font-size: 0.88em; color: #92400e; line-height: 1.6; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+    .tab { background: #f3f4f6; color: #374151; padding: 8px 14px; font-size: 14px; }
+    .tab.active { background: var(--brand); color: #fff; }
+    #preview { width: 100%; height: 620px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    #code { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; font-family: Menlo, Consolas, monospace; font-size: 12.5px; white-space: pre; overflow: auto; height: 620px; }
+    .hidden { display: none !important; }
+    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } .container { padding: 18px; } }
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>📄 電子書目錄頁生成器</h1>
+        <p>選擇 PDF 資料夾 → 貼上大綱 → 確認對應 → 下載 index.html</p>
+    </header>
+
+    <section class="step">
+        <h2><span class="num">1</span>選擇 PDF 資料夾</h2>
+        <div class="row">
+            <button class="btn-primary" id="pickBtn">📁 選擇資料夾</button>
+            <button class="btn-link" id="pickLegacyBtn">選不到資料夾？改用相容模式</button>
+            <input type="file" id="dirInput" webkitdirectory multiple class="hidden">
+        </div>
+        <p class="hint">選擇放有章節 PDF（以及封面圖）的資料夾。檔案只在你的瀏覽器裡讀取，不會上傳。<br>產生的 index.html 要放在這個資料夾的最上層，連結才會正確。</p>
+        <div id="folderInfo" class="folder-info hidden"></div>
+    </section>
+
+    <section class="step">
+        <h2><span class="num">2</span>貼上電子書大綱</h2>
+        <div class="grid2">
+            <div>
+                <textarea id="outline" spellcheck="false" placeholder="第一行：書名&#10;&#10;View Copyright Statement&#10;  出版社：...&#10;  出版年：...&#10;&#10;Front of Book&#10;  Preface&#10;&#10;Table of Contents&#10;  Part 1: ...&#10;    1 - ...&#10;&#10;Back of Book&#10;  Index"></textarea>
+                <div class="row" style="margin-top:10px">
+                    <button class="btn-light" id="sampleBtn">載入範例</button>
+                    <button class="btn-light" id="clearBtn">🔄 清空</button>
+                </div>
+            </div>
+            <div>
+                <label for="bookTitle">書名（自動帶入，可修改）</label>
+                <input type="text" id="bookTitle">
+                <label for="copyrightText">版權文字（自動帶入，可修改）</label>
+                <input type="text" id="copyrightText">
+                <label for="coverSel">封面圖片</label>
+                <select id="coverSel"></select>
+                <label for="copyrightSel">版權頁 PDF</label>
+                <select id="copyrightSel"></select>
+                <p class="hint">
+                    大綱格式：<br>
+                    • 第一行是書名<br>
+                    • 沒有縮排的行是區塊標題（Front of Book、Table of Contents、Back of Book…），輸出成 &lt;h1&gt;<br>
+                    • 「View Copyright Statement」區塊用來帶入書名表格的版權文字<br>
+                    • 「Part 1: …」這種下面還有子項目的行，輸出成 &lt;h2&gt;<br>
+                    • 「1 - 標題」輸出成 <code>1- 連結</code>，其他項目直接輸出成連結
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="step">
+        <h2><span class="num">3</span>確認大綱與 PDF 的對應</h2>
+        <div class="summary" id="summary"></div>
+        <div class="map-wrap">
+            <table class="map">
+                <thead><tr><th style="width:45%">大綱項目</th><th>對應的 PDF</th><th style="width:80px">狀態</th><th style="width:70px;text-align:center">不顯示</th></tr></thead>
+                <tbody id="mapBody"></tbody>
+            </table>
+        </div>
+        <div id="unused" class="unused"></div>
+    </section>
+
+    <section class="step">
+        <h2><span class="num">4</span>輸出 index.html</h2>
+        <div class="row" style="margin-bottom:12px">
+            <input type="text" id="outName" value="index.html" style="width:180px" aria-label="檔名">
+            <button class="btn-primary" id="downloadBtn">⬇️ 下載</button>
+            <button class="btn-ok hidden" id="saveBtn">💾 直接存進資料夾</button>
+            <button class="btn-light" id="copyBtn">📋 複製原始碼</button>
+        </div>
+        <div class="tabs">
+            <button class="tab active" data-tab="preview">預覽</button>
+            <button class="tab" data-tab="code">HTML 原始碼</button>
+        </div>
+        <iframe id="preview" title="預覽"></iframe>
+        <pre id="code" class="hidden"></pre>
+    </section>
+</div>
+
+<script type="text/plain" id="sampleOutline">Critical Care Handbook of the Massachusetts General Hospital（Seventh Edition）
+View Copyright Statement
+  出版社：Lippincott Williams & Wilkins（Wolters Kluwer）, Philadelphia
+  出版年：2024（Copyright © 2024 Wolters Kluwer）
+  版次：Seventh Edition
+  ISBN-13：978-1-975183-79-0
+
+Front of Book
+  Editors
+  Authors
+  Dedication
+  Preface
+
+Table of Contents
+  Part 1: General Principles
+    1 - Hemodynamic Monitoring
+    2 - Respiratory Monitoring
+    3 - Use of Ultrasound in Critical Illness
+  Part 2: Specific Considerations
+    17 - Cardiac Dysrhythmias
+    18 - Heart Failure
+
+Back of Book
+  Index</script>
+
+<script>
+    // ---------- 狀態
+    var state = {
+        files: [],         // { path, base, kind: 'pdf' | 'image', file }
+        urls: {},          // path -> 預覽用的 object URL
+        dirHandle: null,   // 有 File System Access API 時才有，用來直接存回資料夾
+        outline: null,
+        manual: {},        // 手動指定：itemKey -> pdf path（'' 代表手動設為不連結）
+        hidden: {},        // 勾選不顯示：itemKey -> true
+        mapping: {},       // 最終對應：itemKey -> pdf path
+        autoKeys: {},
+        coverManual: null,
+        copyrightManual: null
+    };
+
+    // 產出的 index.html 內建樣式，不需要另外的 index.css
+    var INDEX_CSS = [
+        'body { font-family: Verdana, Tahoma, Geneva, sans-serif; color: #222222; margin: 24px 40px; }',
+        '#booktitle { width: 100%; border-bottom: 3px solid #555555; margin-bottom: 24px; }',
+        '#booktitle td { vertical-align: top; padding-bottom: 16px; }',
+        '#booktitle img { max-width: 160px; border: 1px solid #cccccc; margin-right: 24px; }',
+        '#booktitle h1 { color: #006ba6; font-size: 26px; margin: 0; padding-top: 8px; }',
+        '#booktitle .Copyright a { color: #555555; font-size: 13px; }',
+        'body > h1 { background-color: #006ba6; color: #ffffff; font-size: 22px; font-weight: bold; letter-spacing: 1px; padding: 10px 20px; margin: 28px 0 8px; }',
+        'h2 { color: #006ba6; font-size: 17px; margin: 18px 0 6px 30px; padding-bottom: 4px; border-bottom: 1px solid #cfe3ef; }',
+        'p { font-size: 16px; line-height: 1.5; margin: 4px 0 4px 52px; }',
+        'a { color: #0033cc; }',
+        'a:hover { color: #006ba6; }'
+    ].join('\n');
+    var SECTION_RE = /^(view copyright statement|copyright|front of book|front matter|table of contents|contents|back of book|back matter)$/i;
+    var GROUP_RE = /^(part|section|unit|volume)\s+[0-9ivxlcdm]+\b/i;
+    var NUM_RE = /^(\d+(?:\.\d+)*)\s*[-–—.:]\s*(.+)$/;
+    var STOP = new Set(['the', 'of', 'and', 'in', 'a', 'an', 'for', 'to', 'with', 'on', 'at', 'by', 'or']);
+    var naturalCmp = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare;
+
+    function $(id) { return document.getElementById(id); }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // 檔名照原樣放進 href，只處理會讓網址斷掉的字元
+    function escHref(path) {
+        return escHtml(path.replace(/%/g, '%25').replace(/#/g, '%23').replace(/\?/g, '%3F'));
+    }
+
+    function baseName(path) { return path.split('/').pop().replace(/\.[^.]+$/, ''); }
+
+    function classify(path) {
+        var ext = (path.split('.').pop() || '').toLowerCase();
+        if (ext === 'pdf') return 'pdf';
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp'].indexOf(ext) >= 0) return 'image';
+        return null;
+    }
+
+    // ---------- 解析大綱
+    function indentOf(line) {
+        var n = 0;
+        for (var i = 0; i < line.length; i++) {
+            var ch = line[i];
+            if (ch === ' ') n += 1;
+            else if (ch === '\t') n += 4;
+            else if (ch === '　') n += 2;
+            else break;
+        }
+        return n;
+    }
+
+    function parseOutline(text) {
+        var rows = text.replace(/\r/g, '').split('\n')
+            .filter(function(l) { return l.trim(); })
+            .map(function(l) { return { indent: indentOf(l), text: l.trim() }; });
+        if (!rows.length) return null;
+
+        var title = rows[0].text;
+        var rest = rows.slice(1);
+        var minIndent = Math.min.apply(null, rest.map(function(r) { return r.indent; }));
+        // 縮排在複製時被吃掉的話，改用已知的區塊名稱判斷
+        var flat = rest.every(function(r) { return r.indent === minIndent; });
+
+        var sections = [];
+        var meta = {};
+        var cur = null;
+
+        rest.forEach(function(r, i) {
+            var isHeader = flat ? SECTION_RE.test(r.text) : r.indent === minIndent;
+            if (isHeader) {
+                cur = { name: r.text, copyright: /copyright/i.test(r.text), blocks: [] };
+                sections.push(cur);
+                return;
+            }
+            if (!cur) {
+                cur = { name: '', copyright: false, blocks: [] };
+                sections.push(cur);
+            }
+            if (cur.copyright) {
+                var kv = r.text.match(/^(.+?)[：:]\s*(.*)$/);
+                if (kv) meta[kv[1].trim()] = kv[2].trim();
+                return;
+            }
+            var next = rest[i + 1];
+            var hasChildren = !flat && next && next.indent > r.indent;
+            if (hasChildren || GROUP_RE.test(r.text)) {
+                cur.blocks.push({ type: 'group', text: r.text });
+                return;
+            }
+            var m = r.text.match(NUM_RE);
+            cur.blocks.push({ type: 'item', num: m ? m[1] : '', title: m ? m[2].trim() : r.text });
+        });
+
+        // 用內容當 key，修改大綱時手動指定的對應才不會跑掉
+        var seen = {};
+        sections.forEach(function(s) {
+            s.blocks.forEach(function(b) {
+                if (b.type !== 'item') return;
+                var k = s.name + '|' + b.num + '|' + b.title;
+                seen[k] = (seen[k] || 0) + 1;
+                b.key = seen[k] > 1 ? k + '#' + seen[k] : k;
+            });
+        });
+
+        return { title: title, meta: meta, sections: sections };
+    }
+
+    function deriveCopyright(meta) {
+        var pub = (meta['出版社'] || meta['Publisher'] || '').split(/[（(,，]/)[0].trim();
+        var year = '';
+        ['出版年', 'Year', 'Copyright'].forEach(function(k) {
+            if (!year && meta[k]) { var y = meta[k].match(/\d{4}/); if (y) year = y[0]; }
+        });
+        if (!pub && !year) return '';
+        return '© ' + [year, pub].filter(Boolean).join(' ');
+    }
+
+    function allItems() {
+        var out = [];
+        if (!state.outline) return out;
+        state.outline.sections.forEach(function(s) {
+            if (s.copyright) return;
+            s.blocks.forEach(function(b) { if (b.type === 'item') out.push(b); });
+        });
+        return out;
+    }
+
+    // ---------- 自動對應
+    function norm(s) {
+        return s.toLowerCase()
+            .replace(/&/g, ' and ')
+            .replace(/(\d)(\p{L})/gu, '$1 $2')
+            .replace(/(\p{L})(\d)/gu, '$1 $2')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .trim();
+    }
+
+    function tokens(n) { return n.split(' ').filter(function(t) { return t && !STOP.has(t); }); }
+
+    // 檔名開頭的數字：1-xxx、01 xxx、CH2-1xxx、Chapter 3 xxx
+    function leadNum(base) {
+        var m = base.match(/^(?:ch(?:apter)?|chap)?[\s_\-.]*0*(\d+)/i);
+        return m ? m[1] : '';
+    }
+
+    function score(item, f) {
+        var nf = ' ' + norm(f.base) + ' ';
+        var it = norm(item.title);
+        var s = 0;
+        if (it && nf.indexOf(' ' + it + ' ') >= 0) s += 60;
+        var ti = tokens(it);
+        var fset = new Set(tokens(nf.trim()));
+        if (ti.length) s += 40 * ti.filter(function(t) { return fset.has(t); }).length / ti.length;
+        if (item.num) {
+            var fn = leadNum(f.base);
+            if (fn === String(parseInt(item.num, 10))) s += 40;
+            else if (fn) s -= 30;
+        }
+        return s;
+    }
+
+    function computeMapping() {
+        var items = allItems();
+        var mapping = {};
+        var autoKeys = {};
+        var usedFiles = new Set();
+
+        items.forEach(function(it) {
+            if (Object.prototype.hasOwnProperty.call(state.manual, it.key)) {
+                mapping[it.key] = state.manual[it.key];
+                if (state.manual[it.key]) usedFiles.add(state.manual[it.key]);
+            }
+        });
+        var copyrightPath = currentCopyright();
+        if (copyrightPath) usedFiles.add(copyrightPath);
+
+        var pdfs = state.files.filter(function(f) { return f.kind === 'pdf' && !usedFiles.has(f.path); });
+        var pending = items.filter(function(it) { return !(it.key in mapping); });
+
+        var pairs = [];
+        pending.forEach(function(it) {
+            pdfs.forEach(function(f) {
+                var s = score(it, f);
+                if (s >= 40) pairs.push({ it: it, f: f, s: s });
+            });
+        });
+        pairs.sort(function(a, b) { return b.s - a.s; });
+
+        var doneItems = new Set();
+        pairs.forEach(function(p) {
+            if (doneItems.has(p.it.key) || usedFiles.has(p.f.path)) return;
+            doneItems.add(p.it.key);
+            usedFiles.add(p.f.path);
+            mapping[p.it.key] = p.f.path;
+            autoKeys[p.it.key] = true;
+        });
+
+        state.mapping = mapping;
+        state.autoKeys = autoKeys;
+    }
+
+    function currentCover() {
+        if (state.coverManual !== null) return state.coverManual;
+        var imgs = state.files.filter(function(f) { return f.kind === 'image'; });
+        var hit = imgs.find(function(f) { return /cover/i.test(f.base); });
+        return hit ? hit.path : (imgs[0] ? imgs[0].path : '');
+    }
+
+    function currentCopyright() {
+        if (state.copyrightManual !== null) return state.copyrightManual;
+        var hit = state.files.find(function(f) { return f.kind === 'pdf' && /copyright/i.test(f.base); });
+        return hit ? hit.path : '';
+    }
+
+    // ---------- 產生 index.html
+    function buildIndex(urlFor, forPreview) {
+        var o = state.outline;
+        var title = $('bookTitle').value.trim();
+        var cr = $('copyrightText').value.trim();
+        var cover = currentCover();
+        var copyright = currentCopyright();
+
+        var L = [];
+        L.push('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"');
+        L.push('"http://www.w3.org/TR/html4/strict.dtd">');
+        L.push('<html>');
+        L.push('<head>');
+        if (forPreview) L.push('<base target="_blank">');
+        L.push('<title>' + escHtml(title) + '</title>');
+        L.push('<style type="text/css">');
+        L.push(INDEX_CSS);
+        L.push('</style>');
+        L.push('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">');
+        L.push('</head>');
+        L.push('<body>');
+        L.push('<table id="booktitle" cellpadding="0" cellspacing="0">');
+        L.push('<tr>');
+        L.push('<td rowspan="2"><img src="' + (cover ? urlFor(cover) : '書封面') + '"></td>');
+        L.push('<td><h1>' + escHtml(title) + '</h1></td>');
+        L.push('</tr>');
+        L.push('<tr><td class="Copyright"><a href="' + (copyright ? urlFor(copyright) : 'copyright.pdf') + '">' +
+            escHtml(cr).replace(/©/g, '&copy;') + '</a></td></tr>');
+        L.push('</table>');
+
+        if (o) {
+            o.sections.forEach(function(s) {
+                if (s.copyright) return;
+                // 拿掉勾選不顯示的項目；底下已經沒有項目的 Part 小標題和區塊標題也一起拿掉
+                var shown = s.blocks.filter(function(b) { return b.type === 'group' || !state.hidden[b.key]; });
+                shown = shown.filter(function(b, i) {
+                    if (b.type !== 'group') return true;
+                    var next = shown[i + 1];
+                    return next && next.type !== 'group';
+                });
+                var hasItems = shown.some(function(b) { return b.type === 'item'; });
+                if (!hasItems && s.blocks.length) return;
+                if (s.name) L.push('<h1>' + escHtml(s.name) + '</h1>');
+                shown.forEach(function(b) {
+                    if (b.type === 'group') {
+                        L.push('<h2>' + escHtml(b.text) + '</h2>');
+                        return;
+                    }
+                    var path = state.mapping[b.key];
+                    var link = path ? '<a href="' + urlFor(path) + '">' + escHtml(b.title) + '</a>' : escHtml(b.title);
+                    if (b.num) L.push('<p class="chapter ' + escHtml(b.num) + '">' + escHtml(b.num) + '- ' + link + '</p>');
+                    else L.push('<p class="' + escHtml(b.title) + '">' + link + '</p>');
+                });
+            });
+        }
+
+        L.push('</body>');
+        L.push('</html>');
+        return L.join('\n');
+    }
+
+    function finalHtml() { return buildIndex(escHref, false); }
+
+    function previewHtml() {
+        return buildIndex(function(path) { return state.urls[path] || escHref(path); }, true);
+    }
+
+    // ---------- 畫面
+    function fileOptions(kind, selected, emptyLabel) {
+        var html = '<option value="">' + emptyLabel + '</option>';
+        state.files.forEach(function(f) {
+            if (f.kind !== kind) return;
+            html += '<option value="' + escHtml(f.path) + '"' + (f.path === selected ? ' selected' : '') + '>' + escHtml(f.path) + '</option>';
+        });
+        return html;
+    }
+
+    function renderSelects() {
+        $('coverSel').innerHTML = fileOptions('image', currentCover(), '— 不使用封面 —');
+        $('copyrightSel').innerHTML = fileOptions('pdf', currentCopyright(), '— 未指定 —');
+    }
+
+    function renderTable() {
+        var body = $('mapBody');
+        var o = state.outline;
+        if (!o) {
+            body.innerHTML = '<tr><td colspan="4" class="empty">貼上大綱後會在這裡列出每個項目</td></tr>';
+            $('summary').innerHTML = '';
+            $('unused').textContent = '';
+            return;
+        }
+
+        var rows = '';
+        o.sections.forEach(function(s) {
+            if (s.copyright) return;
+            if (s.name) rows += '<tr class="sec"><td colspan="4">' + escHtml(s.name) + '</td></tr>';
+            s.blocks.forEach(function(b) {
+                if (b.type === 'group') {
+                    rows += '<tr class="grp"><td colspan="4">' + escHtml(b.text) + '</td></tr>';
+                    return;
+                }
+                var path = state.mapping[b.key] || '';
+                var isManual = Object.prototype.hasOwnProperty.call(state.manual, b.key);
+                var hidden = !!state.hidden[b.key];
+                var status = hidden ? '🚫 不顯示' : isManual ? '✋ 手動' : (path ? '✅ 自動' : '⚠️ 未對應');
+                var cls = hidden ? 'off' : (path ? '' : 'miss');
+                rows += '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' +
+                    '<td>' + (b.num ? escHtml(b.num) + '- ' : '') + escHtml(b.title) + '</td>' +
+                    '<td><select data-key="' + escHtml(b.key) + '"' + (hidden ? ' disabled' : '') + '>' + fileOptions('pdf', path, '— 不連結 —') + '</select></td>' +
+                    '<td class="st">' + status + '</td>' +
+                    '<td style="text-align:center"><input type="checkbox" data-hide="' + escHtml(b.key) + '"' + (hidden ? ' checked' : '') + ' aria-label="不顯示"></td></tr>';
+            });
+        });
+        body.innerHTML = rows || '<tr><td colspan="4" class="empty">大綱裡沒有找到項目</td></tr>';
+
+        var items = allItems().filter(function(it) { return !state.hidden[it.key]; });
+        var hiddenCount = allItems().length - items.length;
+        var matched = items.filter(function(it) { return state.mapping[it.key]; }).length;
+        var used = new Set(Object.values(state.mapping));
+        var cp = currentCopyright();
+        if (cp) used.add(cp);
+        var unused = state.files.filter(function(f) { return f.kind === 'pdf' && !used.has(f.path); });
+        var pdfCount = state.files.filter(function(f) { return f.kind === 'pdf'; }).length;
+
+        var chips = '<span class="chip info">資料夾 PDF：' + pdfCount + '</span>';
+        chips += '<span class="chip ' + (matched === items.length ? 'ok' : 'warn') + '">已對應 ' + matched + ' / ' + items.length + '</span>';
+        if (hiddenCount) chips += '<span class="chip info">不顯示：' + hiddenCount + '</span>';
+        if (unused.length) chips += '<span class="chip warn">未使用的 PDF：' + unused.length + '</span>';
+        $('summary').innerHTML = chips;
+        $('unused').innerHTML = unused.length
+            ? '未使用的 PDF：' + unused.map(function(f) { return escHtml(f.path); }).join('、')
+            : '';
+    }
+
+    function renderOutput() {
+        if (!state.outline) {
+            $('code').textContent = '貼上大綱後會在這裡顯示 HTML';
+            $('preview').srcdoc = '<p style="font-family:sans-serif;color:#888;padding:20px">貼上大綱後會在這裡顯示預覽</p>';
+            return;
+        }
+        $('code').textContent = finalHtml();
+        $('preview').srcdoc = previewHtml();
+    }
+
+    function refresh() {
+        state.outline = parseOutline($('outline').value);
+        if (state.outline) {
+            if (!$('bookTitle').dataset.touched) $('bookTitle').value = state.outline.title;
+            if (!$('copyrightText').dataset.touched) $('copyrightText').value = deriveCopyright(state.outline.meta);
+        }
+        computeMapping();
+        renderSelects();
+        renderTable();
+        renderOutput();
+    }
+
+    // ---------- 讀取資料夾
+    function setFiles(list, folderName, dirHandle) {
+        Object.keys(state.urls).forEach(function(p) { URL.revokeObjectURL(state.urls[p]); });
+        state.urls = {};
+        state.files = list.map(function(x) {
+            return { path: x.path, base: baseName(x.path), kind: classify(x.path), file: x.file };
+        }).sort(function(a, b) { return naturalCmp(a.path, b.path); });
+        state.files.forEach(function(f) { state.urls[f.path] = URL.createObjectURL(f.file); });
+        state.dirHandle = dirHandle || null;
+        state.manual = {};
+        state.coverManual = null;
+        state.copyrightManual = null;
+
+        var count = function(k) { return state.files.filter(function(f) { return f.kind === k; }).length; };
+        $('folderInfo').classList.remove('hidden');
+        $('folderInfo').innerHTML = '📂 <strong>' + escHtml(folderName) + '</strong>：PDF ' + count('pdf') +
+            ' 個、圖片 ' + count('image') + ' 個';
+        $('saveBtn').classList.toggle('hidden', !state.dirHandle);
+        refresh();
+    }
+
+    async function readDirHandle(dir, prefix, out) {
+        for await (var entry of dir.entries()) {
+            var name = entry[0], h = entry[1];
+            if (name.charAt(0) === '.') continue;
+            if (h.kind === 'directory') await readDirHandle(h, prefix + name + '/', out);
+            else if (classify(name)) out.push({ path: prefix + name, file: await h.getFile() });
+        }
+    }
+
+    $('pickBtn').onclick = async function() {
+        if (!window.showDirectoryPicker) { $('dirInput').click(); return; }
+        try {
+            var h = await window.showDirectoryPicker({ id: 'ebook-pdfs' });
+            var out = [];
+            await readDirHandle(h, '', out);
+            setFiles(out, h.name, h);
+        } catch (e) {
+            if (e.name !== 'AbortError') alert('無法讀取這個資料夾，請改用「相容模式」選擇。\n' + e.message);
+        }
+    };
+
+    $('pickLegacyBtn').onclick = function() { $('dirInput').click(); };
+
+    $('dirInput').onchange = function(e) {
+        var fl = Array.prototype.slice.call(e.target.files);
+        if (!fl.length) return;
+        var root = fl[0].webkitRelativePath.split('/')[0];
+        var list = fl.filter(function(f) { return classify(f.name) && f.name.charAt(0) !== '.'; }).map(function(f) {
+            return { path: f.webkitRelativePath.split('/').slice(1).join('/'), file: f };
+        });
+        setFiles(list, root, null);
+        e.target.value = '';
+    };
+
+    // ---------- 輸入事件
+    var timer = null;
+    $('outline').addEventListener('input', function() {
+        clearTimeout(timer);
+        timer = setTimeout(refresh, 300);
+    });
+
+    ['bookTitle', 'copyrightText'].forEach(function(id) {
+        $(id).addEventListener('input', function() {
+            $(id).dataset.touched = $(id).value ? '1' : '';
+            renderOutput();
+        });
+    });
+
+    $('coverSel').onchange = function() { state.coverManual = this.value; renderOutput(); };
+    $('copyrightSel').onchange = function() { state.copyrightManual = this.value; refresh(); };
+
+    $('mapBody').addEventListener('change', function(e) {
+        if (e.target.dataset.hide) {
+            if (e.target.checked) state.hidden[e.target.dataset.hide] = true;
+            else delete state.hidden[e.target.dataset.hide];
+        } else if (e.target.tagName === 'SELECT') {
+            state.manual[e.target.dataset.key] = e.target.value;
+        } else {
+            return;
+        }
+        refresh();
+    });
+
+    $('sampleBtn').onclick = function() {
+        $('outline').value = $('sampleOutline').textContent;
+        refresh();
+    };
+
+    $('clearBtn').onclick = function() {
+        $('outline').value = '';
+        ['bookTitle', 'copyrightText'].forEach(function(id) { $(id).value = ''; $(id).dataset.touched = ''; });
+        state.manual = {};
+        state.hidden = {};
+        refresh();
+    };
+
+    document.querySelectorAll('.tab').forEach(function(t) {
+        t.onclick = function() {
+            document.querySelectorAll('.tab').forEach(function(x) { x.classList.toggle('active', x === t); });
+            $('preview').classList.toggle('hidden', t.dataset.tab !== 'preview');
+            $('code').classList.toggle('hidden', t.dataset.tab !== 'code');
+        };
+    });
+
+    // ---------- 輸出
+    function outName() { return $('outName').value.trim() || 'index.html'; }
+
+    function flash(btn, text) {
+        var old = btn.textContent;
+        btn.textContent = text;
+        setTimeout(function() { btn.textContent = old; }, 2000);
+    }
+
+    function checkReady() {
+        if (!state.outline) { alert('請先貼上大綱！'); return false; }
+        if (!$('bookTitle').value.trim()) { alert('請輸入書名！'); return false; }
+        return true;
+    }
+
+    $('downloadBtn').onclick = function() {
+        if (!checkReady()) return;
+        var blob = new Blob([finalHtml()], { type: 'text/html;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = outName();
+        a.click();
+        setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+    };
+
+    $('saveBtn').onclick = async function() {
+        if (!checkReady() || !state.dirHandle) return;
+        var h = state.dirHandle;
+        var name = outName();
+        try {
+            if (await h.requestPermission({ mode: 'readwrite' }) !== 'granted') return;
+            var exists = true;
+            try { await h.getFileHandle(name); } catch (e) { exists = false; }
+            if (exists && !confirm('資料夾裡已經有 ' + name + '，要覆蓋嗎？')) return;
+            var fh = await h.getFileHandle(name, { create: true });
+            var w = await fh.createWritable();
+            await w.write(finalHtml());
+            await w.close();
+            flash($('saveBtn'), '✅ 已存入 ' + name);
+        } catch (e) {
+            alert('存檔失敗，請改用「下載」。\n' + e.message);
+        }
+    };
+
+    $('copyBtn').onclick = function() {
+        if (!checkReady()) return;
+        var text = finalHtml();
+        var fallback = function() {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand('copy');
+            ta.remove();
+            if (ok) flash($('copyBtn'), '✅ 已複製！'); else alert('複製失敗，請到「HTML 原始碼」手動複製');
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(function() { flash($('copyBtn'), '✅ 已複製！'); }, fallback);
+        } else {
+            fallback();
+        }
+    };
+
+    refresh();
+</script>
+</body>
+</html>
